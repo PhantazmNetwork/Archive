@@ -37,7 +37,6 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 public class Archive extends JavaPlugin implements Listener {
-    public static final String NAME = "Archive";
     public static final String RECEIVE_BROADCASTS_PERMISSION = "archive.receive_broadcasts";
     public static final String BACKUP_PERMISSION = "archive.backup";
 
