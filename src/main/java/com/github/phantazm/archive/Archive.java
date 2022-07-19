@@ -3,15 +3,14 @@ package com.github.phantazm.archive;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
-import org.bukkit.command.Command;
-import org.bukkit.command.CommandExecutor;
-import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.Configuration;
 import org.bukkit.configuration.MemoryConfiguration;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.player.PlayerEvent;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.player.*;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
@@ -105,7 +104,31 @@ public class Archive extends JavaPlugin implements Listener {
     }
 
     @EventHandler
-    private void onPlayerEvent(@NotNull PlayerEvent event) {
+    private void onPlayerMove(@NotNull PlayerMoveEvent event) {
+        onInteraction();
+    }
+
+    @EventHandler
+    private void onPlaceBlock(@NotNull BlockPlaceEvent event) {
+        onInteraction();
+    }
+
+    @EventHandler
+    private void onBreakBlock(@NotNull BlockBreakEvent event) {
+        onInteraction();
+    }
+
+    @EventHandler
+    private void onCommandRun(@NotNull PlayerCommandPreprocessEvent event) {
+        onInteraction();
+    }
+
+    @EventHandler
+    private void onPlayerInteract(@NotNull PlayerInteractEvent event) {
+        onInteraction();
+    }
+
+    private void onInteraction() {
         lastInteraction = System.currentTimeMillis();
     }
 
@@ -335,5 +358,7 @@ public class Archive extends JavaPlugin implements Listener {
                 player.sendMessage(component);
             }
         });
+
+        Bukkit.getConsoleSender().sendMessage(component);
     }
 }
