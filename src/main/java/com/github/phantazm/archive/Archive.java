@@ -149,8 +149,8 @@ public class Archive extends JavaPlugin implements Listener {
         defaults.addDefault("backupStartedMessage", "Started backup...");
         defaults.addDefault("backupSucceededMessage", "Backup complete.");
         defaults.addDefault("backupFailedMessage", "Backup failed. Check the server logs for more details.");
-        defaults.addDefault("fileSkipRegexes", List.of("\\.jar$"));
-        defaults.addDefault("directorySkipRegexes", List.of("logs", "cache", "libraries"));
+        defaults.addDefault("fileSkipRegexes", List.of("\\.jar$", "\\.zip$"));
+        defaults.addDefault("directorySkipRegexes", List.of("logs", "cache", "version", "libraries"));
 
         configuration.setDefaults(defaults);
 
