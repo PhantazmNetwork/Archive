@@ -9,6 +9,7 @@ backupSucceededMessage: Backup complete.
 backupFailedMessage: Backup failed. Check the server logs for more details.
 fileSkipRegexes:
   - '\.jar$'
+  - '\.zip$'
 directorySkipRegexes:
   - 'logs'
   - 'cache'

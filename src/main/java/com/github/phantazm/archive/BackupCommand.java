@@ -20,7 +20,7 @@ public class BackupCommand implements CommandExecutor {
                              @NotNull String[] args) {
         if(sender.hasPermission(Archive.BACKUP_PERMISSION)) {
             if(plugin.isEnabled()) {
-                plugin.doBackup();
+                Bukkit.getScheduler().runTaskAsynchronously(plugin, plugin::doBackup);
                 return true;
             }
         }

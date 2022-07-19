@@ -74,7 +74,7 @@ public class Archive extends JavaPlugin implements Listener {
         Logger logger = getLogger();
         PluginManager manager = Bukkit.getPluginManager();
 
-        serverDirectory = getServer().getPluginsFolder().toPath().getParent();
+        serverDirectory = getServer().getWorldContainer().toPath().toAbsolutePath().normalize();
         serverName = serverDirectory.getFileName().toString();
 
         try {
@@ -177,12 +177,14 @@ public class Archive extends JavaPlugin implements Listener {
 
     private List<Pattern> compilePatterns(List<String> regexes) {
         List<Pattern> patterns = new ArrayList<>(regexes.size());
+        Logger logger = getLogger();
         for(String regex : regexes) {
             try {
+                logger.finer("Compiling regex " + regex);
                 patterns.add(Pattern.compile(regex));
             }
             catch (PatternSyntaxException e) {
-                getLogger().warning("Invalid regex in configuration: " + e);
+                logger.warning("Invalid regex in configuration: " + e);
             }
         }
 
@@ -191,7 +193,7 @@ public class Archive extends JavaPlugin implements Listener {
 
     @SuppressWarnings("BooleanMethodIsAlwaysInverted")
     private synchronized boolean initBackupDir() {
-        Path dataPath = getDataFolder().toPath();
+        Path dataPath = getDataFolder().toPath().toAbsolutePath().normalize();
         Path newDirectory = dataPath.resolve(serverName);
 
         if(!newDirectory.equals(backupDirectory) || !Files.exists(backupDirectory)) {
@@ -266,13 +268,16 @@ public class Archive extends JavaPlugin implements Listener {
 
         broadcastMessage(backupStartedMessage);
 
+        Path archive = null;
         try {
             List<Path> backupTargets = new ArrayList<>();
             Files.walkFileTree(serverDirectory, new FileVisitor<>() {
                 @Override
                 public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                    String name = dir.getFileName().toString();
                     for(Pattern pattern : directorySkipRegexes) {
-                        if(pattern.matcher(dir.getFileName().toString()).matches()) {
+                        if(pattern.matcher(name).find()) {
+                            logger.fine("Skipping subtree starting at " + dir);
                             return FileVisitResult.SKIP_SUBTREE;
                         }
                     }
@@ -282,8 +287,10 @@ public class Archive extends JavaPlugin implements Listener {
 
                 @Override
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                    String name = file.getFileName().toString();
                     for(Pattern pattern : fileSkipRegexes) {
-                        if(pattern.matcher(file.getFileName().toString()).matches()) {
+                        if(pattern.matcher(name).find()) {
+                            logger.fine("Skipping file " + file);
                             return FileVisitResult.CONTINUE;
                         }
                     }
@@ -317,12 +324,13 @@ public class Archive extends JavaPlugin implements Listener {
                 });
             }
 
-            Path archive = backupDirectory.resolve(serverName + "_" + DATE_FORMAT.format(new Date()) + ".zip");
+            archive = backupDirectory.resolve(serverName + "_" + DATE_FORMAT.format(new Date()) + ".zip");
             try(ZipOutputStream outputStream = new ZipOutputStream(Files.newOutputStream(archive))) {
                 outputStream.setLevel(compressionLevel);
 
                 for(Path path : backupTargets) {
-                    Path relative = path.relativize(serverDirectory);
+                    logger.fine("Compressing " + path);
+                    Path relative = serverDirectory.relativize(path);
 
                     ZipEntry entry = new ZipEntry(relative.toString());
                     outputStream.putNextEntry(entry);
@@ -336,6 +344,10 @@ public class Archive extends JavaPlugin implements Listener {
             broadcastMessage(backupSucceededMessage);
         } catch (IOException e) {
             logger.warning("Uncaught IOException when backing up files: " + e);
+            logger.warning("backupDirectory: " + backupDirectory);
+            logger.warning("serverDirectory: " + serverDirectory);
+            logger.warning("serverName: " + serverName);
+            logger.warning("archive: " + archive);
             broadcastMessage(backupFailedMessage);
         }
     }
