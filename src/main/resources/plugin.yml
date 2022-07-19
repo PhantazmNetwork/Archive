@@ -1,0 +1,18 @@
+main: com.github.phantazm.archive.Archive
+
+name: Archive
+version: 0.0.1
+description: A simple backup plugin which tries to avoid creating redundant backups.
+author: steanky
+website: https://github.com/PhantazmNetwork
+
+permissions:
+  archive.receive_broadcasts:
+    description: Allows players to receive notifications (message broadcasts) from Archive regarding backups.
+  archive.backup:
+    description: Allows players to manually trigger backups.
+
+commands:
+  backup:
+    usage: /backup
+    description: Immediately triggers a server backup.

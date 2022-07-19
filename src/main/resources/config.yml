@@ -1,0 +1,14 @@
+backupIntervalSeconds: 1800
+lastInteractionThresholdSeconds: 600
+broadcastMessages: true
+skipBackupMessage: Skipped backup due to no player activity.
+backupStartedMessage: Started backup...
+backupSucceededMessage: Backup complete.
+backupFailedMessage: Backup failed. Check the server logs for more details.
+fileSkipRegexes:
+  - '\.jar$'
+directorySkipRegexes:
+  - 'logs'
+  - 'cache'
+  - 'libraries'
+
