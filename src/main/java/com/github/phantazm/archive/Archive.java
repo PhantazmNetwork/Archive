@@ -274,7 +274,7 @@ public class Archive extends JavaPlugin implements Listener {
             Files.walkFileTree(serverDirectory, new FileVisitor<>() {
                 @Override
                 public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                    String name = dir.getFileName().toString();
+                    String name = serverDirectory.relativize(dir).toString();
                     for(Pattern pattern : directorySkipRegexes) {
                         if(pattern.matcher(name).find()) {
                             logger.fine("Skipping subtree starting at " + dir);
@@ -287,7 +287,7 @@ public class Archive extends JavaPlugin implements Listener {
 
                 @Override
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                    String name = file.getFileName().toString();
+                    String name = serverDirectory.relativize(file).toString();
                     for(Pattern pattern : fileSkipRegexes) {
                         if(pattern.matcher(name).find()) {
                             logger.fine("Skipping file " + file);
