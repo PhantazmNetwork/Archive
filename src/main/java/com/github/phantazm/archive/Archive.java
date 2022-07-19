@@ -8,7 +8,9 @@ import org.bukkit.configuration.MemoryConfiguration;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.player.PlayerEvent;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.player.*;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
@@ -29,19 +31,18 @@ import java.util.Objects;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
+import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 public class Archive extends JavaPlugin implements Listener {
-    public static final String NAME = "Archive";
+    public static final String RECEIVE_BROADCASTS_PERMISSION = "archive.receive_broadcasts";
+    public static final String BACKUP_PERMISSION = "archive.backup";
 
     private static final int WAIT_TIMEOUT_MS = 10000;
     private static final int MS_PER_SECOND = 1000;
 
     private static final Format DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd-hh-mm-ss");
-
-    public static final String RECEIVE_BROADCASTS_PERMISSION = "archive.receive_broadcasts";
-    public static final String BACKUP_PERMISSION = "archive.backup";
 
     //necessary variables
     private Thread backup;
@@ -52,7 +53,9 @@ public class Archive extends JavaPlugin implements Listener {
 
     //configuration parameters
     private long backupIntervalSeconds;
+    private long backupDeletionThresholdSeconds;
     private long lastInteractionThresholdSeconds;
+    private int compressionLevel;
     private boolean broadcastMessages;
     private Component skipBackupMessage;
     private Component backupStartedMessage;
@@ -92,29 +95,41 @@ public class Archive extends JavaPlugin implements Listener {
         lastInteraction = System.currentTimeMillis();
         manager.registerEvents(this, this);
 
+        Objects.requireNonNull(getCommand("backup")).setExecutor(new BackupCommand(this));
+
         if(joinBackupThread()) {
-            initBackupThread();
+            backup = new Thread(this::backupProcess, "Archive Backup Thread");
+            backup.start();
         }
     }
 
-    @SuppressWarnings("BooleanMethodIsAlwaysInverted")
-    private synchronized boolean initBackupDir() {
-        Path dataPath = getDataFolder().toPath();
-        Path newDirectory = dataPath.resolve(serverName);
+    @EventHandler
+    private void onPlayerMove(@NotNull PlayerMoveEvent event) {
+        onInteraction();
+    }
 
-        if(!newDirectory.equals(backupDirectory) || !Files.exists(backupDirectory)) {
-            backupDirectory = newDirectory;
+    @EventHandler
+    private void onPlaceBlock(@NotNull BlockPlaceEvent event) {
+        onInteraction();
+    }
 
-            try {
-                Files.createDirectories(backupDirectory);
-            }
-            catch (IOException e) {
-                getLogger().warning("Failed to create necessary backup directories");
-                return false;
-            }
-        }
+    @EventHandler
+    private void onBreakBlock(@NotNull BlockBreakEvent event) {
+        onInteraction();
+    }
 
-        return true;
+    @EventHandler
+    private void onCommandRun(@NotNull PlayerCommandPreprocessEvent event) {
+        onInteraction();
+    }
+
+    @EventHandler
+    private void onPlayerInteract(@NotNull PlayerInteractEvent event) {
+        onInteraction();
+    }
+
+    private void onInteraction() {
+        lastInteraction = System.currentTimeMillis();
     }
 
     private void initConfig() {
@@ -126,7 +141,9 @@ public class Archive extends JavaPlugin implements Listener {
 
         Configuration defaults = new MemoryConfiguration();
         defaults.addDefault("backupIntervalSeconds", 1800L);
+        defaults.addDefault("backupDeletionThresholdSeconds", 86400L);
         defaults.addDefault("lastInteractionThresholdSeconds", 600L);
+        defaults.addDefault("compressionLevel", 9);
         defaults.addDefault("broadcastMessages", true);
         defaults.addDefault("skipBackupMessage", "Skipped backup due to no player activity.");
         defaults.addDefault("backupStartedMessage", "Started backup...");
@@ -138,7 +155,13 @@ public class Archive extends JavaPlugin implements Listener {
         configuration.setDefaults(defaults);
 
         backupIntervalSeconds = configuration.getLong("backupIntervalSeconds");
+        backupDeletionThresholdSeconds = configuration.getLong("backupDeletionThresholdSeconds");
         lastInteractionThresholdSeconds = configuration.getLong("lastInteractionThresholdSeconds");
+        compressionLevel = configuration.getInt("compressionLevel");
+        if(compressionLevel < -1 || compressionLevel > 9) {
+            getLogger().warning("Invalid compression level " + compressionLevel + ", defaulting to 9");
+            compressionLevel = 9;
+        }
         broadcastMessages = configuration.getBoolean("broadcastMessages");
         skipBackupMessage = miniMessage.deserialize(Objects.requireNonNull(configuration
                 .getString("skipBackupMessage")));
@@ -166,9 +189,24 @@ public class Archive extends JavaPlugin implements Listener {
         return patterns;
     }
 
-    private void initBackupThread() {
-        backup = new Thread(this::backup, "Archive Backup Thread");
-        backup.start();
+    @SuppressWarnings("BooleanMethodIsAlwaysInverted")
+    private synchronized boolean initBackupDir() {
+        Path dataPath = getDataFolder().toPath();
+        Path newDirectory = dataPath.resolve(serverName);
+
+        if(!newDirectory.equals(backupDirectory) || !Files.exists(backupDirectory)) {
+            backupDirectory = newDirectory;
+
+            try {
+                Files.createDirectories(backupDirectory);
+            }
+            catch (IOException e) {
+                getLogger().warning("Failed to create necessary backup directories");
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private boolean joinBackupThread() {
@@ -199,12 +237,7 @@ public class Archive extends JavaPlugin implements Listener {
         return true;
     }
 
-    @EventHandler
-    private void onPlayerEvent(@NotNull PlayerEvent event) {
-        lastInteraction = System.currentTimeMillis();
-    }
-
-    private void backup() {
+    private void backupProcess() {
         try {
             while(true) {
                 //noinspection BusyWait
@@ -270,9 +303,24 @@ public class Archive extends JavaPlugin implements Listener {
                     return FileVisitResult.CONTINUE;
                 }
             });
+            try(Stream<Path> paths = Files.walk(backupDirectory, 1)) {
+                paths.filter(path -> path.getFileName().toString().endsWith(".zip")).forEach(path -> {
+                    try {
+                        long age = System.currentTimeMillis() - Files.getLastModifiedTime(path).toMillis();
+
+                        if(age / MS_PER_SECOND > backupDeletionThresholdSeconds) {
+                            Files.delete(path);
+                        }
+                    } catch (IOException e) {
+                        logger.warning("IOException when attempting to delete old backup file: " + e);
+                    }
+                });
+            }
 
             Path archive = backupDirectory.resolve(serverName + "_" + DATE_FORMAT.format(new Date()) + ".zip");
             try(ZipOutputStream outputStream = new ZipOutputStream(Files.newOutputStream(archive))) {
+                outputStream.setLevel(compressionLevel);
+
                 for(Path path : backupTargets) {
                     Path relative = path.relativize(serverDirectory);
 
@@ -310,5 +358,7 @@ public class Archive extends JavaPlugin implements Listener {
                 player.sendMessage(component);
             }
         });
+
+        Bukkit.getConsoleSender().sendMessage(component);
     }
 }
