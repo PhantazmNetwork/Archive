@@ -3,6 +3,9 @@ package com.github.phantazm.archive;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.Configuration;
 import org.bukkit.configuration.MemoryConfiguration;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -93,6 +96,8 @@ public class Archive extends JavaPlugin implements Listener {
 
         lastInteraction = System.currentTimeMillis();
         manager.registerEvents(this, this);
+
+        Objects.requireNonNull(getCommand("backup")).setExecutor(new BackupCommand(this));
 
         if(joinBackupThread()) {
             backup = new Thread(this::backupProcess, "Archive Backup Thread");
