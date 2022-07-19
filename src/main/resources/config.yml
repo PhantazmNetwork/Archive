@@ -13,5 +13,6 @@ fileSkipRegexes:
 directorySkipRegexes:
   - 'logs'
   - 'cache'
+  - 'versions'
   - 'libraries'
 

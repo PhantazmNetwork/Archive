@@ -259,7 +259,7 @@ public class Archive extends JavaPlugin implements Listener {
         }
     }
 
-    public void doBackup() {
+    public synchronized void doBackup() {
         Logger logger = getLogger();
         if(!initBackupDir()) {
             logger.warning("Backup skipped due to failure to create the backup directory.");
@@ -325,6 +325,7 @@ public class Archive extends JavaPlugin implements Listener {
             }
 
             archive = backupDirectory.resolve(serverName + "_" + DATE_FORMAT.format(new Date()) + ".zip");
+            logger.info("Creating archive... " + archive);
             try(ZipOutputStream outputStream = new ZipOutputStream(Files.newOutputStream(archive))) {
                 outputStream.setLevel(compressionLevel);
 

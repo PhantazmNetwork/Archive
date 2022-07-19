@@ -16,4 +16,4 @@ permissions:
 commands:
   backup:
     usage: /backup
-    description: Immediately triggers a server backup.
+    description: Immediately triggers a server backup, if there is not already one ongoing.
