@@ -28,6 +28,8 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
@@ -45,6 +47,7 @@ public class Archive extends JavaPlugin implements Listener {
     private static final Format DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd-hh-mm-ss");
 
     //necessary variables
+    private Lock backupLock;
     private Thread backup;
     private volatile long lastInteraction;
     private Path backupDirectory;
@@ -67,6 +70,11 @@ public class Archive extends JavaPlugin implements Listener {
     @Override
     public void onDisable() {
         joinBackupThread();
+        backup = null;
+        backupLock = null;
+        backupDirectory = null;
+        serverName = null;
+        serverDirectory = null;
     }
 
     @Override
@@ -97,8 +105,9 @@ public class Archive extends JavaPlugin implements Listener {
 
         Objects.requireNonNull(getCommand("backup")).setExecutor(new BackupCommand(this));
 
+        backupLock = new ReentrantLock();
         if(joinBackupThread()) {
-            backup = new Thread(this::backupProcess, "Archive Backup Thread");
+            backup = new Thread(this::automaticBackupProcess, "Archive Backup Thread");
             backup.start();
         }
     }
@@ -239,7 +248,7 @@ public class Archive extends JavaPlugin implements Listener {
         return true;
     }
 
-    private void backupProcess() {
+    private void automaticBackupProcess() {
         try {
             while(true) {
                 //noinspection BusyWait
@@ -254,102 +263,110 @@ public class Archive extends JavaPlugin implements Listener {
                 }
             }
         }
-        catch (InterruptedException ignored) {
-            getLogger().info("Backup thread interrupted.");
-        }
+        catch (InterruptedException ignored) {}
     }
 
-    public synchronized void doBackup() {
-        Logger logger = getLogger();
-        if(!initBackupDir()) {
-            logger.warning("Backup skipped due to failure to create the backup directory.");
+    public void doBackup() {
+        //if we're already backing up, immediately return (don't wait on acquiring the lock)
+        if(!backupLock.tryLock()) {
             return;
         }
 
-        broadcastMessage(backupStartedMessage);
-
-        Path archive = null;
         try {
-            List<Path> backupTargets = new ArrayList<>();
-            Files.walkFileTree(serverDirectory, new FileVisitor<>() {
-                @Override
-                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                    String name = serverDirectory.relativize(dir).toString();
-                    for(Pattern pattern : directorySkipRegexes) {
-                        if(pattern.matcher(name).find()) {
-                            logger.fine("Skipping subtree starting at " + dir);
-                            return FileVisitResult.SKIP_SUBTREE;
+            Logger logger = getLogger();
+            if(!initBackupDir()) {
+                logger.warning("Backup skipped due to failure to create the backup directory.");
+                return;
+            }
+
+            broadcastMessage(backupStartedMessage);
+
+            Path archive = null;
+            try {
+                List<Path> backupTargets = new ArrayList<>();
+                Files.walkFileTree(serverDirectory, new FileVisitor<>() {
+                    @Override
+                    public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                        String name = serverDirectory.relativize(dir).toString();
+                        for(Pattern pattern : directorySkipRegexes) {
+                            if(pattern.matcher(name).find()) {
+                                logger.fine("Skipping subtree starting at " + dir);
+                                return FileVisitResult.SKIP_SUBTREE;
+                            }
                         }
+
+                        return FileVisitResult.CONTINUE;
                     }
 
-                    return FileVisitResult.CONTINUE;
-                }
-
-                @Override
-                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                    String name = serverDirectory.relativize(file).toString();
-                    for(Pattern pattern : fileSkipRegexes) {
-                        if(pattern.matcher(name).find()) {
-                            logger.fine("Skipping file " + file);
-                            return FileVisitResult.CONTINUE;
+                    @Override
+                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                        String name = serverDirectory.relativize(file).toString();
+                        for(Pattern pattern : fileSkipRegexes) {
+                            if(pattern.matcher(name).find()) {
+                                logger.fine("Skipping file " + file);
+                                return FileVisitResult.CONTINUE;
+                            }
                         }
+
+                        backupTargets.add(file);
+                        return FileVisitResult.CONTINUE;
                     }
 
-                    backupTargets.add(file);
-                    return FileVisitResult.CONTINUE;
-                }
+                    @Override
+                    public FileVisitResult visitFileFailed(Path file, IOException exc) {
+                        logger.warning("IOException when visiting " + file + ": " + exc);
+                        return FileVisitResult.CONTINUE;
+                    }
 
-                @Override
-                public FileVisitResult visitFileFailed(Path file, IOException exc) {
-                    logger.warning("IOException when visiting " + file + ": " + exc);
-                    return FileVisitResult.CONTINUE;
-                }
-
-                @Override
-                public FileVisitResult postVisitDirectory(Path dir, IOException exc) {
-                    return FileVisitResult.CONTINUE;
-                }
-            });
-            try(Stream<Path> paths = Files.walk(backupDirectory, 1)) {
-                paths.filter(path -> path.getFileName().toString().endsWith(".zip")).forEach(path -> {
-                    try {
-                        long age = System.currentTimeMillis() - Files.getLastModifiedTime(path).toMillis();
-
-                        if(age / MS_PER_SECOND > backupDeletionThresholdSeconds) {
-                            Files.delete(path);
-                        }
-                    } catch (IOException e) {
-                        logger.warning("IOException when attempting to delete old backup file " + path + ": " + e);
+                    @Override
+                    public FileVisitResult postVisitDirectory(Path dir, IOException exc) {
+                        return FileVisitResult.CONTINUE;
                     }
                 });
-            }
+                try(Stream<Path> paths = Files.walk(backupDirectory, 1)) {
+                    paths.filter(path -> path.getFileName().toString().endsWith(".zip")).forEach(path -> {
+                        try {
+                            long age = System.currentTimeMillis() - Files.getLastModifiedTime(path).toMillis();
 
-            archive = backupDirectory.resolve(serverName + "_" + DATE_FORMAT.format(new Date()) + ".zip");
-            logger.info("Creating archive... " + archive);
-            try(ZipOutputStream outputStream = new ZipOutputStream(Files.newOutputStream(archive))) {
-                outputStream.setLevel(compressionLevel);
-
-                for(Path path : backupTargets) {
-                    logger.fine("Compressing " + path);
-                    Path relative = serverDirectory.relativize(path);
-
-                    ZipEntry entry = new ZipEntry(relative.toString());
-                    outputStream.putNextEntry(entry);
-                    try(InputStream stream = Files.newInputStream(relative)) {
-                        stream.transferTo(outputStream);
-                    }
-                    outputStream.closeEntry();
+                            if(age / MS_PER_SECOND > backupDeletionThresholdSeconds) {
+                                Files.delete(path);
+                            }
+                        } catch (IOException e) {
+                            logger.warning("IOException when attempting to delete old backup file " + path + ": " + e);
+                        }
+                    });
                 }
-            }
 
-            broadcastMessage(backupSucceededMessage);
-        } catch (IOException e) {
-            logger.warning("Uncaught IOException when backing up files: " + e);
-            logger.warning("backupDirectory: " + backupDirectory);
-            logger.warning("serverDirectory: " + serverDirectory);
-            logger.warning("serverName: " + serverName);
-            logger.warning("archive: " + archive);
-            broadcastMessage(backupFailedMessage);
+                archive = backupDirectory.resolve(serverName + "_" + DATE_FORMAT.format(new Date()) + ".zip");
+                logger.info("Creating archive... " + archive);
+                try(ZipOutputStream outputStream = new ZipOutputStream(Files.newOutputStream(archive))) {
+                    outputStream.setLevel(compressionLevel);
+
+                    for(Path path : backupTargets) {
+                        logger.fine("Compressing " + path);
+                        Path relative = serverDirectory.relativize(path);
+
+                        ZipEntry entry = new ZipEntry(relative.toString());
+                        outputStream.putNextEntry(entry);
+                        try(InputStream stream = Files.newInputStream(relative)) {
+                            stream.transferTo(outputStream);
+                        }
+                        outputStream.closeEntry();
+                    }
+                }
+
+                broadcastMessage(backupSucceededMessage);
+            } catch (IOException e) {
+                logger.warning("Uncaught IOException when backing up files: " + e);
+                logger.warning("backupDirectory: " + backupDirectory);
+                logger.warning("serverDirectory: " + serverDirectory);
+                logger.warning("serverName: " + serverName);
+                logger.warning("archive: " + archive);
+                broadcastMessage(backupFailedMessage);
+            }
+        }
+        finally {
+            backupLock.unlock();
         }
     }
 
