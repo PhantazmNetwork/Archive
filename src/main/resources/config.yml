@@ -1,5 +1,7 @@
 backupIntervalSeconds: 1800
+backupDeletionThresholdSeconds: 86400
 lastInteractionThresholdSeconds: 600
+compressionLevel: 9
 broadcastMessages: true
 skipBackupMessage: Skipped backup due to no player activity.
 backupStartedMessage: Started backup...
