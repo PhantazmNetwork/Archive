@@ -20,21 +20,16 @@ import java.nio.file.FileVisitor;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.nio.file.attribute.FileTime;
 import java.text.Format;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.Stream;
-import java.util.zip.Deflater;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -100,28 +95,14 @@ public class Archive extends JavaPlugin implements Listener {
         manager.registerEvents(this, this);
 
         if(joinBackupThread()) {
-            initBackupThread();
+            backup = new Thread(this::backupProcess, "Archive Backup Thread");
+            backup.start();
         }
     }
 
-    @SuppressWarnings("BooleanMethodIsAlwaysInverted")
-    private synchronized boolean initBackupDir() {
-        Path dataPath = getDataFolder().toPath();
-        Path newDirectory = dataPath.resolve(serverName);
-
-        if(!newDirectory.equals(backupDirectory) || !Files.exists(backupDirectory)) {
-            backupDirectory = newDirectory;
-
-            try {
-                Files.createDirectories(backupDirectory);
-            }
-            catch (IOException e) {
-                getLogger().warning("Failed to create necessary backup directories");
-                return false;
-            }
-        }
-
-        return true;
+    @EventHandler
+    private void onPlayerEvent(@NotNull PlayerEvent event) {
+        lastInteraction = System.currentTimeMillis();
     }
 
     private void initConfig() {
@@ -181,9 +162,24 @@ public class Archive extends JavaPlugin implements Listener {
         return patterns;
     }
 
-    private void initBackupThread() {
-        backup = new Thread(this::backup, "Archive Backup Thread");
-        backup.start();
+    @SuppressWarnings("BooleanMethodIsAlwaysInverted")
+    private synchronized boolean initBackupDir() {
+        Path dataPath = getDataFolder().toPath();
+        Path newDirectory = dataPath.resolve(serverName);
+
+        if(!newDirectory.equals(backupDirectory) || !Files.exists(backupDirectory)) {
+            backupDirectory = newDirectory;
+
+            try {
+                Files.createDirectories(backupDirectory);
+            }
+            catch (IOException e) {
+                getLogger().warning("Failed to create necessary backup directories");
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private boolean joinBackupThread() {
@@ -214,12 +210,7 @@ public class Archive extends JavaPlugin implements Listener {
         return true;
     }
 
-    @EventHandler
-    private void onPlayerEvent(@NotNull PlayerEvent event) {
-        lastInteraction = System.currentTimeMillis();
-    }
-
-    private void backup() {
+    private void backupProcess() {
         try {
             while(true) {
                 //noinspection BusyWait
