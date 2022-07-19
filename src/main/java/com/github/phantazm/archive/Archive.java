@@ -319,7 +319,7 @@ public class Archive extends JavaPlugin implements Listener {
                             Files.delete(path);
                         }
                     } catch (IOException e) {
-                        logger.warning("IOException when attempting to delete old backup file: " + e);
+                        logger.warning("IOException when attempting to delete old backup file " + path + ": " + e);
                     }
                 });
             }
