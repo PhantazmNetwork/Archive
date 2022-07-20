@@ -37,8 +37,18 @@ import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
+/**
+ * Main plugin class for Archive.
+ */
 public class Archive extends JavaPlugin implements Listener {
+    /**
+     * The name of the permission node which controls who can receive Archive broadcast messages.
+     */
     public static final String RECEIVE_BROADCASTS_PERMISSION = "archive.receive_broadcasts";
+
+    /**
+     * The name of the permission node which controls who can trigger manual backups using the backup command.
+     */
     public static final String BACKUP_PERMISSION = "archive.backup";
 
     private static final int WAIT_TIMEOUT_MS = 10000;
@@ -262,6 +272,9 @@ public class Archive extends JavaPlugin implements Listener {
         catch (InterruptedException ignored) {}
     }
 
+    /**
+     * Runs the backup, if one is not currently ongoing. If there is an ongoing backup, this method immediately returns.
+     */
     public void doBackup() {
         //if we're already backing up, immediately return (don't wait on acquiring the lock)
         if(!backupLock.tryLock()) {

@@ -11,7 +11,7 @@ permissions:
   archive.receive_broadcasts:
     description: Allows players to receive notifications (message broadcasts) from Archive regarding backups.
   archive.backup:
-    description: Allows players to manually trigger backups.
+    description: Allows players to manually trigger Archive backups.
 
 commands:
   backup:
