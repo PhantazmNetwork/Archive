@@ -57,7 +57,6 @@ public class Archive extends JavaPlugin implements Listener {
     //configuration parameters
     private long backupIntervalSeconds;
     private long backupDeletionThresholdSeconds;
-    private long lastInteractionThresholdSeconds;
     private int compressionLevel;
     private boolean broadcastMessages;
     private Component skipBackupMessage;
@@ -151,7 +150,6 @@ public class Archive extends JavaPlugin implements Listener {
         Configuration defaults = new MemoryConfiguration();
         defaults.addDefault("backupIntervalSeconds", 1800L);
         defaults.addDefault("backupDeletionThresholdSeconds", 86400L);
-        defaults.addDefault("lastInteractionThresholdSeconds", 600L);
         defaults.addDefault("compressionLevel", 9);
         defaults.addDefault("broadcastMessages", true);
         defaults.addDefault("skipBackupMessage", "Skipped backup due to no player activity.");
@@ -165,7 +163,6 @@ public class Archive extends JavaPlugin implements Listener {
 
         backupIntervalSeconds = configuration.getLong("backupIntervalSeconds");
         backupDeletionThresholdSeconds = configuration.getLong("backupDeletionThresholdSeconds");
-        lastInteractionThresholdSeconds = configuration.getLong("lastInteractionThresholdSeconds");
         compressionLevel = configuration.getInt("compressionLevel");
         if(compressionLevel < -1 || compressionLevel > 9) {
             getLogger().warning("Invalid compression level " + compressionLevel + ", defaulting to 9");
@@ -236,7 +233,6 @@ public class Archive extends JavaPlugin implements Listener {
 
                 if(backup.isAlive()) {
                     logger.warning("Backup thread is still alive.");
-                    Bukkit.getPluginManager().disablePlugin(this);
                     return false;
                 }
 
@@ -254,8 +250,8 @@ public class Archive extends JavaPlugin implements Listener {
                 //noinspection BusyWait
                 Thread.sleep(backupIntervalSeconds * MS_PER_SECOND);
 
-                //backups can be skipped if players have been inactive for long enough
-                if((this.lastInteraction / MS_PER_SECOND) + backupIntervalSeconds < lastInteractionThresholdSeconds) {
+                //only backup if there has been an interaction since the last backup time
+                if(System.currentTimeMillis() - (backupIntervalSeconds * MS_PER_SECOND) < this.lastInteraction) {
                     doBackup();
                 }
                 else if(broadcastMessages) {
@@ -332,7 +328,8 @@ public class Archive extends JavaPlugin implements Listener {
                                 Files.delete(path);
                             }
                         } catch (IOException e) {
-                            logger.warning("IOException when attempting to delete old backup file " + path + ": " + e);
+                            logger.warning("IOException when attempting to delete old backup file " + path + ": "
+                                    + e);
                         }
                     });
                 }
