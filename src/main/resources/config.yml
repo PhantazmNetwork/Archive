@@ -1,11 +1,11 @@
 backupIntervalSeconds: 1800
-backupDeletionThresholdSeconds: 86400
+backupsToKeep: 10
 compressionLevel: 9
 broadcastMessages: true
-skipBackupMessage: Skipped backup due to no player activity.
-backupStartedMessage: Started backup...
-backupSucceededMessage: Backup complete.
-backupFailedMessage: Backup failed. Check the server logs for more details.
+skipBackupMessage: <#ff7700><bold>[Archive]</bold></#ff7700><#ff9800> Skipped backup due to no player activity.
+backupStartedMessage: <#ff7700><bold>[Archive]</bold></#ff7700><#ff9800> Starting backup...
+backupSucceededMessage: <#ff7700><bold>[Archive]</bold></#ff7700><#ff9800> Backup complete.
+backupFailedMessage: <#ff7700><bold>[Archive]</bold></#ff7700><#ff4400> Backup failed. Check the server logs for more details.
 fileSkipRegexes:
   - '\.jar$'
   - '\.zip$'

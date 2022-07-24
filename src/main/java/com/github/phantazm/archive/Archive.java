@@ -22,17 +22,16 @@ import java.nio.file.FileVisitor;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
 import java.text.Format;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -66,7 +65,7 @@ public class Archive extends JavaPlugin implements Listener {
 
     //configuration parameters
     private long backupIntervalSeconds;
-    private long backupDeletionThresholdSeconds;
+    private int backupsToKeep;
     private int compressionLevel;
     private boolean broadcastMessages;
     private Component skipBackupMessage;
@@ -159,7 +158,7 @@ public class Archive extends JavaPlugin implements Listener {
 
         Configuration defaults = new MemoryConfiguration();
         defaults.addDefault("backupIntervalSeconds", 1800L);
-        defaults.addDefault("backupDeletionThresholdSeconds", 86400L);
+        defaults.addDefault("backupsToKeep", 10);
         defaults.addDefault("compressionLevel", 9);
         defaults.addDefault("broadcastMessages", true);
         defaults.addDefault("skipBackupMessage", "Skipped backup due to no player activity.");
@@ -172,7 +171,7 @@ public class Archive extends JavaPlugin implements Listener {
         configuration.setDefaults(defaults);
 
         backupIntervalSeconds = configuration.getLong("backupIntervalSeconds");
-        backupDeletionThresholdSeconds = configuration.getLong("backupDeletionThresholdSeconds");
+        backupsToKeep = configuration.getInt("backupsToKeep");
         compressionLevel = configuration.getInt("compressionLevel");
         if(compressionLevel < -1 || compressionLevel > 9) {
             getLogger().warning("Invalid compression level " + compressionLevel + ", defaulting to 9");
@@ -333,18 +332,27 @@ public class Archive extends JavaPlugin implements Listener {
                     }
                 });
                 try(Stream<Path> paths = Files.walk(backupDirectory, 1)) {
-                    paths.filter(path -> path.getFileName().toString().endsWith(".zip")).forEach(path -> {
-                        try {
-                            long age = System.currentTimeMillis() - Files.getLastModifiedTime(path).toMillis();
+                    List<Path> byAge = paths.filter(path -> path.getFileName().toString().endsWith(".zip"))
+                                            .sorted(Comparator.comparing((Path path) -> {
+                                                try {
+                                                    return Files.getLastModifiedTime(path);
+                                                } catch (IOException e) {
+                                                    logger.warning("IOException when reading file time from " +
+                                                            path);
+                                                    return FileTime.fromMillis(Long.MAX_VALUE);
+                                                }
+                                            }).reversed()).collect(Collectors.toCollection(ArrayList::new));
 
-                            if(age / MS_PER_SECOND > backupDeletionThresholdSeconds) {
-                                Files.delete(path);
-                            }
-                        } catch (IOException e) {
-                            logger.warning("IOException when attempting to delete old backup file " + path + ": "
-                                    + e);
+                    while(byAge.size() > backupsToKeep) {
+                        Path toRemove = byAge.remove(byAge.size() - 1);
+
+                        try {
+                            Files.delete(toRemove);
                         }
-                    });
+                        catch (IOException e) {
+                            logger.warning("IOException when deleting old backup " + toRemove + ": " + e);
+                        }
+                    }
                 }
 
                 archive = backupDirectory.resolve(serverName + "_" + DATE_FORMAT.format(new Date()) + ".zip");

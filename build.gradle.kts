@@ -3,7 +3,7 @@ plugins {
 }
 
 group = "com.github.phantazm"
-version = "0.0.1"
+version = "0.1.0"
 description = "A simple backup plugin which uses regex matching and can back up an entire Minecraft server."
 
 repositories {
