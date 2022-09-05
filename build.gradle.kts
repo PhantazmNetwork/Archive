@@ -1,9 +1,9 @@
 plugins {
-    id("java")
+    java
 }
 
-group = "com.github.phantazm"
-version = "0.1.0"
+group = "com.github.phantazmnetwork"
+version = "0.2.0"
 description = "A simple backup plugin which uses regex matching and can back up an entire Minecraft server."
 
 repositories {
@@ -22,6 +22,10 @@ tasks.withType<Jar> {
     }
 }
 
+tasks.processResources {
+    inputs.property("version", project.version)
+}
+
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:1.18.2-R0.1-SNAPSHOT")
+    compileOnly("io.papermc.paper:paper-api:1.19.2-R0.1-SNAPSHOT")
 }

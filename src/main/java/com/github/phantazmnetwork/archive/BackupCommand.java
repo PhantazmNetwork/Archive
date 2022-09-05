@@ -1,4 +1,4 @@
-package com.github.phantazm.archive;
+package com.github.phantazmnetwork.archive;
 
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;

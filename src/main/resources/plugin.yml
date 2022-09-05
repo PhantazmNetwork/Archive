@@ -1,8 +1,8 @@
-main: com.github.phantazm.archive.Archive
+main: com.github.phantazmnetwork.archive.Archive
 
 name: Archive
-version: 0.1.0
-api-version: 1.18
+version: 0.2.0
+api-version: 1.19
 description: A simple backup plugin which tries to avoid creating redundant backups.
 author: steanky
 website: https://github.com/PhantazmNetwork
